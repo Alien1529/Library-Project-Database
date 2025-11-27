@@ -45,7 +45,7 @@ BEGIN
     END IF;
 
     -- Validate year is within a logical range
-    IF p_year IS NULL OR p_year < 1400 OR p_year > EXTRACT(YEAR FROM CURRENT_DATE) THEN
+    IF p_year IS NULL OR p_year < 700 OR p_year > EXTRACT(YEAR FROM CURRENT_DATE) THEN
         RAISE EXCEPTION 'The year % is invalid', p_year;
     END IF;
 
@@ -60,6 +60,7 @@ BEGIN
 END;
 $$;
 
+------------------------------------------------------------------------------------------------------------------
 
 -- STORE PROCEDURE TO INSERT A USER
 CREATE OR REPLACE PROCEDURE sp_insert_user(
@@ -112,6 +113,7 @@ BEGIN
 END;
 $$;
 
+------------------------------------------------------------------------------------------------------------------
 
 -- STORE PROCEDURE TO REGISTER A BOOK LOAN
 CREATE OR REPLACE PROCEDURE sp_register_loan(
@@ -159,40 +161,32 @@ BEGIN
     -- Insert loan record
     INSERT INTO Library.Loan (UserId, ISBN, LoanDate, ExpectedReturnDate)
     VALUES (p_userid, p_isbn, p_loandate, p_expectedreturndate);
-
-    -- Insert into log (audit trail)
-    INSERT INTO Library.LoansLog (UserId, ISBN, OperationType, OperationDate)
-    VALUES (p_userid, p_isbn, 'Loan', CURRENT_TIMESTAMP);
 END;
 $$;
 
+------------------------------------------------------------------------------------------------------------------
 
--- STORE PROCEDURE TO REGISTER A BOOK RETURN
-CREATE OR REPLACE PROCEDURE sp_register_return(
-    p_loanid INT,
+-- STORE PROCEDURE TO REGISTER A BOOK RETURN BY ISBN
+CREATE OR REPLACE PROCEDURE sp_register_return_by_isbn(
+    p_isbn VARCHAR,
     p_actualreturndate DATE
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
+    v_loanid INT;
     v_userid INT;
-    v_isbn VARCHAR;
     v_loandate DATE;
-    v_returned DATE;
 BEGIN
-    -- Validate that the loan exists
-    SELECT UserId, ISBN, LoanDate, ActualReturnDate
-    INTO v_userid, v_isbn, v_loandate, v_returned
+    -- Validate that there is an active loan for this ISBN
+    SELECT LoanId, UserId, LoanDate
+    INTO v_loanid, v_userid, v_loandate
     FROM Library.Loan
-    WHERE LoanId = p_loanid;
+    WHERE ISBN = p_isbn AND ActualReturnDate IS NULL
+    LIMIT 1;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'Loan with id % does not exist', p_loanid;
-    END IF;
-
-    -- Validate that the loan has not already been returned
-    IF v_returned IS NOT NULL THEN
-        RAISE EXCEPTION 'Loan % has already been returned', p_loanid;
+        RAISE EXCEPTION 'No active loan found for book with ISBN %', p_isbn;
     END IF;
 
     -- Validate return date is not null
@@ -213,38 +207,124 @@ BEGIN
     -- Update loan record with actual return date
     UPDATE Library.Loan
     SET ActualReturnDate = p_actualreturndate
-    WHERE LoanId = p_loanid;
-
-    -- Insert into log (audit trail)
-    INSERT INTO Library.LoansLog (UserId, ISBN, OperationType, OperationDate)
-    VALUES (v_userid, v_isbn, 'Return', CURRENT_TIMESTAMP);
+    WHERE LoanId = v_loanid;
 END;
 $$;
 
+------------------------------------------------------------------------------------------------------------------
 
 -- VIEW TO DISPLAY THE HISTORY OF LOANS AND REPAYMENTS MADE BY A USER
 CREATE OR REPLACE VIEW vw_user_history AS
-SELECT u.UserId, u.Email, b.Title, l.OperationType, l.OperationDate
+SELECT 
+    u.UserId, 
+    u.Email, 
+    b.Title, 
+    l.OperationType, 
+    l.OperationDate
 FROM Library.LoansLog l
 JOIN Library.User u ON l.UserId = u.UserId
 JOIN Library.Book b ON l.ISBN = b.ISBN;
 
+--------------------------------------------------------------
+
 
 -- VIEW TO DISPLAY THE FIVE MOST BORROWED BOOKS
 CREATE OR REPLACE VIEW vw_top5_books AS
-SELECT b.Title, COUNT(*) AS LoanCount
+SELECT 
+    b.Title, 
+    COUNT(*) AS LoanCount
 FROM Library.Loan l
 JOIN Library.Book b ON l.ISBN = b.ISBN
 GROUP BY b.Title
 ORDER BY LoanCount DESC
 LIMIT 5;
 
+--------------------------------------------------------------
+
 -- VIEW TO DISPLAY THE USER WITH MORE THAN TWO ACTIVE LOANS, THAT IS, 
 -- THOSE FOR WHOM REPAYMENT HAS NOT YET BEEN MADE
 CREATE OR REPLACE VIEW vw_users_with_active_loans AS
-SELECT u.UserId, u.Email, COUNT(*) AS ActiveLoans
+SELECT 
+    u.UserId, 
+    u.Email, 
+    COUNT(*) AS ActiveLoans
 FROM Library.Loan l
 JOIN Library.User u ON l.UserId = u.UserId
 WHERE l.ActualReturnDate IS NULL
 GROUP BY u.UserId, u.Email
 HAVING COUNT(*) > 2;
+
+--------------------------------------------------------------
+
+-- VIEW TO DISPLAY BOOKS WITH THEIR THEMES
+CREATE OR REPLACE VIEW vw_books_with_theme AS
+SELECT 
+    b.ISBN,
+    b.Title,
+    b.Author,
+    b.Editorial,
+    b.Year,
+    t.ThemeName
+FROM Library.Book b
+JOIN Library.Theme t ON b.ThemeId = t.ThemeId;
+
+------------------------------------------------------------------------------------------------------------------
+
+-- TRIGGERS TO LOG LOANS AND RETURNS IN LoansLog TABLE
+CREATE OR REPLACE FUNCTION fn_log_loan()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Insert into LoansLog when a new loan is created
+    INSERT 
+    INTO Library.LoansLog (
+        UserId, 
+        ISBN, 
+        OperationType, 
+        OperationDate)
+    VALUES (
+        NEW.UserId, 
+        NEW.ISBN, 
+        'Loan', 
+        CURRENT_TIMESTAMP);
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_log_loan
+AFTER INSERT ON Library.Loan
+FOR EACH ROW
+EXECUTE FUNCTION fn_log_loan();
+
+--------------------------------------------------------------
+
+
+CREATE OR REPLACE FUNCTION fn_log_return()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Only log when ActualReturnDate is updated
+    IF NEW.ActualReturnDate IS NOT NULL AND OLD.ActualReturnDate IS NULL THEN
+        INSERT INTO Library.LoansLog (
+            UserId, 
+            ISBN, 
+            OperationType, 
+            OperationDate)
+        VALUES (
+            NEW.UserId, 
+            NEW.ISBN, 
+            'Return', 
+            CURRENT_TIMESTAMP);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_log_return
+AFTER UPDATE OF ActualReturnDate ON Library.Loan
+FOR EACH ROW
+EXECUTE FUNCTION fn_log_return();
+
+

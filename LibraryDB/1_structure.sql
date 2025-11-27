@@ -1,7 +1,12 @@
 -- PostgreSQL database creation script
 CREATE DATABASE Library
+
+-- Create schema for the library
 CREATE SCHEMA IF NOT EXISTS Library;
 
+-- TABLE DEFINITIONS
+
+-- Table: User
 CREATE TABLE Library.User (
     UserId integer GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) NOT NULL,
     Email varchar(40),
@@ -11,6 +16,7 @@ CREATE TABLE Library.User (
     CONSTRAINT UQ_User_Email UNIQUE (Email)
 );
 
+-- Table: Book
 CREATE TABLE Library.Book (
     ISBN varchar(9) NOT NULL,
     Title varchar(40),
@@ -21,6 +27,7 @@ CREATE TABLE Library.Book (
     CONSTRAINT PK_Book_ISBN PRIMARY KEY (ISBN)
 );
 
+-- Table: Theme
 CREATE TABLE Library.Theme (
     ThemeId integer GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) NOT NULL,
     ThemeName varchar(20),
@@ -28,6 +35,7 @@ CREATE TABLE Library.Theme (
     CONSTRAINT UQ_Theme_ThemeName UNIQUE (ThemeName)
 );
 
+-- Table: LoansLog
 CREATE TABLE Library.LoansLog (
     LogId integer GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) NOT NULL,
     UserId integer,
@@ -37,6 +45,7 @@ CREATE TABLE Library.LoansLog (
     CONSTRAINT PK_LoansLog_LogId PRIMARY KEY (LogId)
 );
 
+-- Table: Loan
 CREATE TABLE Library.Loan (
     LoanId integer GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) NOT NULL,
     UserId integer,
