@@ -56,8 +56,30 @@ CREATE TABLE Library.Loan (
     CONSTRAINT PK_Loan_LoanId PRIMARY KEY (LoanId)
 );
 
--- Foreign key constraints
+-- FOREIGN KEY CONSTRAINTS
 -- Schema: Library
 ALTER TABLE Library.Book ADD CONSTRAINT FK_Book_ThemeId_Theme_ThemeId FOREIGN KEY(ThemeId) REFERENCES Library.Theme(ThemeId);
 ALTER TABLE Library.Loan ADD CONSTRAINT FK_Loan_ISBN_Book_ISBN FOREIGN KEY(ISBN) REFERENCES Library.Book(ISBN);
 ALTER TABLE Library.Loan ADD CONSTRAINT FK_Loan_UserId_User_UserId FOREIGN KEY(UserId) REFERENCES Library.User(UserId);
+
+
+
+-- INDEXES
+-- Schema: Library
+
+-- Indexes for Table: LoansLog
+-- This index helps to speed up queries filtering by UserId, ISBN, or OperationDate.
+CREATE INDEX IX_LoansLog_UserId ON Library.LoansLog(UserId);
+CREATE INDEX IX_LoansLog_ISBN ON Library.LoansLog(ISBN);
+CREATE INDEX IX_LoansLog_OperationDate ON Library.LoansLog(OperationDate);
+
+-- Indexes for Table: Loan
+-- This index helps to speed up queries filtering by UserId and is useful for other queries.
+CREATE INDEX IX_Loan_UserId ON Library.Loan(UserId);
+CREATE INDEX idx_loan_isbn ON Library.Loan(ISBN);
+CREATE INDEX IX_Loan_ActualReturnDate ON Library.Loan(ActualReturnDate);
+
+-- Indexes for Table: Book
+-- This index helps to speed up queries filtering by Title and includes Author for covering index.
+CREATE INDEX IX_Book_Themeid ON Library.Book(Title)
+INCLUDE (Author);

@@ -1,5 +1,5 @@
 -- STORE PROCEDURE TO INSERT A BOOK
-CREATE OR REPLACE PROCEDURE sp_insert_book(
+CREATE OR REPLACE PROCEDURE Library.sp_insert_book(
     p_isbn VARCHAR,
     p_title VARCHAR,
     p_author VARCHAR,
@@ -63,7 +63,7 @@ $$;
 ------------------------------------------------------------------------------------------------------------------
 
 -- STORE PROCEDURE TO INSERT A USER
-CREATE OR REPLACE PROCEDURE sp_insert_user(
+CREATE OR REPLACE PROCEDURE Library.sp_insert_user(
     p_email VARCHAR,
     p_firstname VARCHAR,
     p_lastname VARCHAR
@@ -116,7 +116,7 @@ $$;
 ------------------------------------------------------------------------------------------------------------------
 
 -- STORE PROCEDURE TO REGISTER A BOOK LOAN
-CREATE OR REPLACE PROCEDURE sp_register_loan(
+CREATE OR REPLACE PROCEDURE Library.sp_register_loan(
     p_userid INT,
     p_isbn VARCHAR,
     p_loandate DATE,
@@ -167,7 +167,7 @@ $$;
 ------------------------------------------------------------------------------------------------------------------
 
 -- STORE PROCEDURE TO REGISTER A BOOK RETURN BY ISBN
-CREATE OR REPLACE PROCEDURE sp_register_return_by_isbn(
+CREATE OR REPLACE PROCEDURE Library.sp_register_return_by_isbn(
     p_isbn VARCHAR,
     p_actualreturndate DATE
 )
@@ -214,7 +214,7 @@ $$;
 ------------------------------------------------------------------------------------------------------------------
 
 -- VIEW TO DISPLAY THE HISTORY OF LOANS AND REPAYMENTS MADE BY A USER
-CREATE OR REPLACE VIEW vw_user_history AS
+CREATE OR REPLACE VIEW Library.vw_user_history AS
 SELECT 
     u.UserId, 
     u.Email, 
@@ -229,13 +229,15 @@ JOIN Library.Book b ON l.ISBN = b.ISBN;
 
 
 -- VIEW TO DISPLAY THE FIVE MOST BORROWED BOOKS
-CREATE OR REPLACE VIEW vw_top5_books AS
+CREATE OR REPLACE VIEW Library.vw_top5_books AS
 SELECT 
-    b.Title, 
+    b.Title,
+    b.ISBN,
     COUNT(*) AS LoanCount
-FROM Library.Loan l
+FROM Library.LoansLog l
 JOIN Library.Book b ON l.ISBN = b.ISBN
-GROUP BY b.Title
+WHERE l.OperationType = 'Loan'
+GROUP BY b.Title, b.ISBN
 ORDER BY LoanCount DESC
 LIMIT 5;
 
@@ -243,7 +245,7 @@ LIMIT 5;
 
 -- VIEW TO DISPLAY THE USER WITH MORE THAN TWO ACTIVE LOANS, THAT IS, 
 -- THOSE FOR WHOM REPAYMENT HAS NOT YET BEEN MADE
-CREATE OR REPLACE VIEW vw_users_with_active_loans AS
+CREATE OR REPLACE VIEW Library.vw_users_with_active_loans AS
 SELECT 
     u.UserId, 
     u.Email, 
@@ -257,7 +259,7 @@ HAVING COUNT(*) > 2;
 --------------------------------------------------------------
 
 -- VIEW TO DISPLAY BOOKS WITH THEIR THEMES
-CREATE OR REPLACE VIEW vw_books_with_theme AS
+CREATE OR REPLACE VIEW Library.vw_books_with_theme AS
 SELECT 
     b.ISBN,
     b.Title,
@@ -271,7 +273,7 @@ JOIN Library.Theme t ON b.ThemeId = t.ThemeId;
 ------------------------------------------------------------------------------------------------------------------
 
 -- TRIGGERS TO LOG LOANS AND RETURNS IN LoansLog TABLE
-CREATE OR REPLACE FUNCTION fn_log_loan()
+CREATE OR REPLACE FUNCTION Library.fn_log_loan()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -295,12 +297,12 @@ $$;
 CREATE TRIGGER trg_log_loan
 AFTER INSERT ON Library.Loan
 FOR EACH ROW
-EXECUTE FUNCTION fn_log_loan();
+EXECUTE FUNCTION Library.fn_log_loan();
 
 --------------------------------------------------------------
 
 
-CREATE OR REPLACE FUNCTION fn_log_return()
+CREATE OR REPLACE FUNCTION Library.fn_log_return()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -325,6 +327,6 @@ $$;
 CREATE TRIGGER trg_log_return
 AFTER UPDATE OF ActualReturnDate ON Library.Loan
 FOR EACH ROW
-EXECUTE FUNCTION fn_log_return();
+EXECUTE FUNCTION Library.fn_log_return();
 
 
